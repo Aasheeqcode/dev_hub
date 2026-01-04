@@ -9,7 +9,12 @@ dotenv.config();
 connectDB();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: '*', // Allow ALL origins (Easiest fix for now)
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 // --- ROUTES ---
 const authRoutes = require("./routes/authRoutes");

@@ -1,5 +1,5 @@
 // src/pages/AuthPage.tsx
-
+import { API_BASE_URL } from '../config';
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom"; 
 
@@ -48,8 +48,8 @@ export default function AuthPage() {
     
     // Check your backend port! (Defaulting to 5000 based on your code)
     const endpoint = isSignIn 
-      ? "http://localhost:5000/api/auth/login" 
-      : "http://localhost:5000/api/auth/register";
+      ? `${API_BASE_URL}/api/auth/login` 
+      : `${API_BASE_URL}/api/auth/register`;
 
     const payload = isSignIn
       ? { email: formData.email, password: formData.password }
