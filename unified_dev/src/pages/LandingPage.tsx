@@ -1,248 +1,270 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { Image, Video, Code, Link as LinkIcon, Globe, TrendingUp, Users, MessageSquare, Bookmark, Trophy, Layout, UserPlus, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Code, Layout, Users, Bookmark, Trophy, 
+  MessageSquare, X, Type, Image as ImageIcon 
+} from 'lucide-react';
+
 import { GlassCard } from '../components/GlassCard';
 import { NeonButton } from '../components/NeonButton';
-import { PostCard } from '../components/PostCard';
+import { PostCard, PostProps } from '../components/PostCard';
 import { Sidebar } from '../components/Sidebar';
+
+// Define User Interface matching backend response
+interface UserProfile {
+  _id: string;
+  name: string;
+  email: string;
+  picturePath?: string;
+  occupation?: string;
+  viewedProfile?: number;
+  impressions?: number;
+}
+
 export function LandingPage() {
-  const [postText, setPostText] = useState('');
-  const [posts, setPosts] = useState([{
-    id: 1,
-    author: {
-      id: 2,
-      name: 'Sarah Chen',
-      role: 'Senior Frontend Engineer',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80',
-      time: '2h ago'
-    },
-    content: {
-      text: 'Just shipped the new dashboard with React 18 and Framer Motion! 🚀 The performance improvements are insane. Check out this snippet for the staggered animation hook I created.',
-      code: {
-        language: 'typescript',
-        snippet: `const useStagger = (delay: number = 0.1) => {
-  return {
-    hidden: { opacity: 0, y: 20 },
-    visible: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: { delay: i * delay }
-    })
-  };
-};`
-      }
-    },
-    stats: {
-      likes: 243,
-      comments: 42,
-      shares: 12
-    }
-  }, {
-    id: 2,
-    author: {
-      id: 3,
-      name: 'David Miller',
-      role: 'Full Stack Developer',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80',
-      time: '5h ago'
-    },
-    content: {
-      text: 'Working on a new AI-powered code review tool. The neon theme is coming along nicely! What do you think about this color palette? 🎨',
-      image: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80'
-    },
-    stats: {
-      likes: 856,
-      comments: 124,
-      shares: 45
-    }
-  }]);
-  const sidebarItems = [{
-    name: 'My Feed',
-    path: '/',
-    icon: <Layout className="w-4 h-4" />
-  }, {
-    name: 'My Posts',
-    path: '/profile',
-    icon: <Users className="w-4 h-4" />
-  }, {
-    name: 'Saved',
-    path: '/saved',
-    icon: <Bookmark className="w-4 h-4" />,
-    badge: '12'
-  }, {
-    name: 'My Contests',
-    path: '/contests',
-    icon: <Trophy className="w-4 h-4" />
-  }, {
-    name: 'Forums',
-    path: '/forum',
-    icon: <MessageSquare className="w-4 h-4" />
-  }];
-  const handleCreatePost = () => {
-    if (!postText.trim()) return;
-    const newPost = {
-      id: posts.length + 1,
-      author: {
-        id: 1,
-        name: 'Madhan Annadurai',
-        role: 'Full Stack Developer',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80',
-        time: 'Just now'
-      },
-      content: {
-        text: postText
-      },
-      stats: {
-        likes: 0,
-        comments: 0,
-        shares: 0
+  const navigate = useNavigate();
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [posts, setPosts] = useState<PostProps[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Create Post Form State
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [postType, setPostType] = useState('general');
+  const [showCodeEditor, setShowCodeEditor] = useState(false);
+  const [codeSnippet, setCodeSnippet] = useState('');
+  const [language, setLanguage] = useState('javascript');
+  const [isPosting, setIsPosting] = useState(false);
+
+  // Helper to get token
+  const getToken = () => localStorage.getItem('token');
+
+  // Fetch Initial Data
+  useEffect(() => {
+    const fetchData = async () => {
+      const token = getToken();
+      if (!token) return navigate('/login');
+
+      try {
+        // 1. Get User Profile (Auth Check)
+        const userRes = await fetch('http://localhost:5000/api/users/profile', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!userRes.ok) throw new Error("Auth Failed");
+        const userData = await userRes.json();
+        setUser(userData);
+
+        // 2. Get News Feed
+        const postsRes = await fetch('http://localhost:5000/api/posts', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const postsData = await postsRes.json();
+        setPosts(postsData);
+
+      } catch (err) {
+        console.error(err);
+        navigate('/login');
+      } finally {
+        setLoading(false);
       }
     };
-    setPosts([newPost, ...posts]);
-    setPostText('');
+    fetchData();
+  }, [navigate]);
+
+  // Handle Post Creation
+  const handleCreatePost = async () => {
+    if (!title.trim() || !description.trim()) return;
+    setIsPosting(true);
+    
+    try {
+      const token = getToken();
+      const payload = {
+        title,
+        description,
+        postType,
+        codeSnippet: showCodeEditor ? codeSnippet : "",
+        language: showCodeEditor ? language : "text",
+        // Most backends extract userId from token, but sending it just in case
+        userId: user?._id 
+      };
+
+      const response = await fetch('http://localhost:5000/api/posts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        const newPost = await response.json();
+        setPosts([newPost, ...posts]);
+        
+        // Reset form
+        setTitle('');
+        setDescription('');
+        setCodeSnippet('');
+        setPostType('general');
+        setIsExpanded(false);
+        setShowCodeEditor(false);
+      }
+    } catch (err) {
+      console.error("Post failed:", err);
+    } finally {
+      setIsPosting(false);
+    }
   };
-  return <div className="min-h-screen pt-6 pb-12">
+
+  const sidebarItems = [
+    { name: 'My Feed', path: '/home', icon: <Layout className="w-4 h-4" /> },
+    { name: 'My Profile', path: '/profile', icon: <Users className="w-4 h-4" /> },
+    { name: 'Saved', path: '/saved', icon: <Bookmark className="w-4 h-4" /> },
+    { name: 'Contests', path: '/contests', icon: <Trophy className="w-4 h-4" /> },
+    { name: 'Forum', path: '/forum', icon: <MessageSquare className="w-4 h-4" /> }
+  ];
+  const postTypes = [
+    { id: 'general', label: 'General', color: 'bg-gray-500/20 text-gray-300' },
+    { id: 'question', label: 'Question', color: 'bg-orange-500/20 text-orange-300' },
+    { id: 'showcase', label: 'Showcase', color: 'bg-purple-500/20 text-purple-300' },
+    { id: 'discussion', label: 'Discussion', color: 'bg-blue-500/20 text-blue-300' },
+  ];
+  
+  return (
+    <div className="min-h-screen pt-6 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Sidebar */}
+          
+          {/* LEFT SIDEBAR */}
           <div className="hidden lg:block lg:col-span-3 space-y-6">
-            <GlassCard className="p-6 text-center">
-              <div className="relative inline-block mb-4">
-                <div className="w-20 h-20 rounded-full p-[2px] bg-gradient-to-br from-neon-violet to-neon-blue">
-                  <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80" alt="Profile" className="w-full h-full rounded-full object-cover border-2 border-navy-900" />
-                </div>
-                <div className="absolute bottom-0 right-0 w-5 h-5 bg-green-500 rounded-full border-4 border-navy-900"></div>
+            <GlassCard className="p-0 overflow-hidden relative">
+              <div className="h-20 bg-gradient-to-r from-neon-violet/20 to-neon-blue/20"></div>
+              <div className="px-6 pb-6 text-center -mt-10">
+                {user ? (
+                  <>
+                    <div className="relative inline-block mb-3">
+                      <div className="p-1 bg-navy-900 rounded-full">
+                        <img 
+                          src={user.picturePath || `https://ui-avatars.com/api/?name=${user.name}&background=random`} 
+                          alt={user.name} 
+                          className="w-20 h-20 rounded-full object-cover border-2 border-white/10 bg-navy-800" 
+                        />
+                      </div>
+                      <div className="absolute bottom-1 right-1 w-4 h-4 bg-green-500 border-2 border-navy-900 rounded-full"></div>
+                    </div>
+                    <h2 className="font-bold text-white text-lg">{user.name}</h2>
+                    <p className="text-xs text-neon-blue uppercase mb-4">{user.occupation || "Developer"}</p>
+                    
+                    <div className="border-t border-white/5 pt-4">
+                      <Link to="/profile" className="text-xs text-gray-400 hover:text-white flex justify-center gap-2">
+                          View Full Profile →
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <div className="animate-pulse pt-2 space-y-3">
+                    <div className="w-20 h-20 bg-white/10 rounded-full mx-auto"></div>
+                    <div className="h-4 bg-white/10 rounded w-1/2 mx-auto"></div>
+                  </div>
+                )}
               </div>
-              <h2 className="text-lg font-bold text-white">Madhan Annadurai</h2>
-              <p className="text-sm text-neon-blue mb-4">
-                Full Stack Developer
-              </p>
-
-              <div className="flex justify-between text-sm text-gray-400 border-t border-white/10 pt-4 mb-4">
-                <div className="text-center">
-                  <div className="font-bold text-white">1.2k</div>
-                  <div className="text-xs">Followers</div>
-                </div>
-                <div className="text-center">
-                  <div className="font-bold text-white">450</div>
-                  <div className="text-xs">Following</div>
-                </div>
-                <div className="text-center">
-                  <div className="font-bold text-white">85</div>
-                  <div className="text-xs">Projects</div>
-                </div>
-              </div>
-
-              <Link to="/profile">
-                <NeonButton variant="outline" size="sm" className="w-full">
-                  View Profile
-                </NeonButton>
-              </Link>
             </GlassCard>
-
-            <GlassCard className="p-2">
-              <Sidebar items={sidebarItems} />
-            </GlassCard>
+            <GlassCard className="p-2"><Sidebar items={sidebarItems} /></GlassCard>
           </div>
 
-          {/* Center Feed */}
+          {/* MAIN FEED */}
           <div className="lg:col-span-6 space-y-6">
-            {/* Create Post */}
-            <GlassCard className="p-4">
-              <div className="flex space-x-4">
-                <Link to="/profile">
-                  <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80" alt="Profile" className="w-10 h-10 rounded-full object-cover" />
-                </Link>
-                <div className="flex-1">
-                  <input type="text" value={postText} onChange={e => setPostText(e.target.value)} placeholder="Start a post..." className="w-full bg-navy-900/50 border border-white/10 rounded-full px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-neon-violet/50 transition-colors" />
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="flex space-x-2">
-                      <button className="p-2 text-neon-blue hover:bg-white/5 rounded-lg transition-colors">
-                        <Image className="w-5 h-5" />
-                      </button>
-                      <button className="p-2 text-neon-violet hover:bg-white/5 rounded-lg transition-colors">
-                        <Video className="w-5 h-5" />
-                      </button>
-                      <button className="p-2 text-pink-500 hover:bg-white/5 rounded-lg transition-colors">
-                        <Code className="w-5 h-5" />
-                      </button>
-                      <button className="p-2 text-yellow-500 hover:bg-white/5 rounded-lg transition-colors">
-                        <LinkIcon className="w-5 h-5" />
-                      </button>
+            <GlassCard className="p-4 relative overflow-hidden">
+               {/* Post Creator UI */}
+               {!isExpanded ? (
+                 <div onClick={() => setIsExpanded(true)} className="flex items-center gap-4 cursor-pointer">
+                    <div className="w-10 h-10 rounded-full bg-gray-700/50 flex items-center justify-center">
+                       <Type className="text-gray-400 w-5 h-5" />
                     </div>
-                    <NeonButton size="sm" onClick={handleCreatePost} disabled={!postText.trim()}>
-                      Post
-                    </NeonButton>
-                  </div>
-                </div>
-              </div>
+                    <div className="flex-1 bg-navy-900/50 hover:bg-navy-900/80 transition-colors border border-white/5 rounded-full px-4 py-2.5">
+                      <span className="text-gray-400 text-sm">Start a discussion...</span>
+                    </div>
+                 </div>
+               ) : (
+                 <AnimatePresence>
+                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-4">
+                      <div className="flex justify-between border-b border-white/5 pb-2">
+                        <span className="font-bold text-white">Create Post</span>
+                        <button onClick={() => setIsExpanded(false)}><X className="text-gray-400 w-5 h-5 hover:text-white"/></button>
+                      </div>
+                      <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" className="w-full bg-transparent border-b border-white/10 p-2 text-white outline-none font-bold" autoFocus />
+                      <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Description..." className="w-full bg-navy-900/30 p-3 rounded text-white outline-none h-24 resize-none border border-white/10"/>
+                      
+                      <div className="flex gap-2">
+                          {['general', 'question', 'showcase'].map(t => (
+                            <button key={t} onClick={() => setPostType(t)} className={`text-xs px-3 py-1 rounded-full border ${postType === t ? 'border-neon-blue text-neon-blue bg-neon-blue/10' : 'border-gray-700 text-gray-400'}`}>{t}</button>
+                          ))}
+                      </div>
+
+                      {showCodeEditor && (
+                        <div className="bg-[#0d1117] p-2 rounded border border-white/10">
+                            <div className="flex justify-end mb-1">
+                                <select 
+                                  value={language} 
+                                  onChange={e => setLanguage(e.target.value)} 
+                                  className="bg-white/5 text-gray-400 text-xs rounded border-none cursor-pointer"
+                                >
+                                    <option value="text">Plain Text</option>
+                                    <option value="javascript">JavaScript</option>
+                                    <option value="python">Python</option>
+                                    <option value="java">Java</option>
+                                    <option value="cpp">C++</option>
+                                    <option value="typescript">TypeScript</option>
+                                    <option value="sql">SQL</option>
+                                </select>
+                            </div>
+                            <textarea 
+                                value={codeSnippet} onChange={e => setCodeSnippet(e.target.value)}
+                                placeholder="// Paste your code here..."
+                                className="w-full bg-transparent font-mono text-sm text-green-400 h-24 outline-none resize-none"
+                            />
+                        </div>
+                      )}
+
+                      <div className="flex justify-between items-center pt-2">
+                          <button onClick={() => setShowCodeEditor(!showCodeEditor)} className={`p-2 rounded hover:bg-white/5 ${showCodeEditor ? 'text-neon-blue' : 'text-gray-400'}`}><Code className="w-5 h-5"/></button>
+                          <NeonButton size="sm" onClick={handleCreatePost} disabled={isPosting}>{isPosting ? 'Posting...' : 'Post'}</NeonButton>
+                      </div>
+                   </motion.div>
+                 </AnimatePresence>
+               )}
             </GlassCard>
 
-            {/* Posts Feed */}
             <div className="space-y-6">
-              {posts.map((post, index) => <motion.div key={post.id} initial={{
-              opacity: 0,
-              y: 20
-            }} animate={{
-              opacity: 1,
-              y: 0
-            }} transition={{
-              delay: index * 0.1
-            }}>
-                  <PostCard {...post} />
-                </motion.div>)}
+              {loading ? (
+                <div className="text-center text-gray-500">Loading...</div>
+              ) : (
+                posts.map(post => (
+                  <PostCard 
+                    key={post._id} 
+                    {...post} 
+                    // PASSING REQUIRED AUTH DATA HERE
+                    token={getToken()} 
+                    currentUserId={user?._id}
+                  />
+                ))
+              )}
             </div>
           </div>
 
-          {/* Right Sidebar */}
-          <div className="hidden lg:block lg:col-span-3 space-y-6">
+          {/* RIGHT SIDEBAR */}
+          <div className="hidden lg:block lg:col-span-3">
             <GlassCard className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-white">Trending Hackathons</h3>
-                <TrendingUp className="w-4 h-4 text-neon-blue" />
-              </div>
-              <div className="space-y-4">
-                {[1, 2, 3].map(i => <div key={i} className="group cursor-pointer">
-                    <div className="text-sm font-medium text-white group-hover:text-neon-violet transition-colors">
-                      Global AI Challenge 2024
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      Starts in 2 days • 15k participants
-                    </div>
-                  </div>)}
-              </div>
-              <NeonButton variant="ghost" size="sm" className="w-full mt-4 text-xs">
-                View All
-              </NeonButton>
-            </GlassCard>
-
-            <GlassCard className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-white">Suggested Mentors</h3>
-                <Users className="w-4 h-4 text-neon-violet" />
-              </div>
-              <div className="space-y-4">
-                {[1, 2, 3].map(i => <div key={i} className="flex items-center space-x-3">
-                    <Link to={`/user/${i + 3}`}>
-                      <img src={`https://images.unsplash.com/photo-${1500000000000 + i}?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80`} alt="Mentor" className="w-10 h-10 rounded-full object-cover" />
-                    </Link>
-                    <div>
-                      <Link to={`/user/${i + 3}`} className="text-sm font-medium text-white hover:text-neon-blue transition-colors">
-                        {['Jane Doe', 'Mike Ross', 'Emily Zhang'][i - 1]}
-                      </Link>
-                      <div className="text-xs text-gray-400">
-                        Google • Ex-Meta
-                      </div>
-                    </div>
-                    <button className="ml-auto text-neon-blue hover:text-white text-xs font-medium">
-                      Follow
-                    </button>
-                  </div>)}
-              </div>
+               <h3 className="text-white font-bold mb-3">Trending</h3>
+               <div className="text-gray-400 text-sm">#WebDev</div>
             </GlassCard>
           </div>
+
         </div>
       </div>
-    </div>;
+    </div>
+  );
 }

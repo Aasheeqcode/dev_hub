@@ -8,7 +8,6 @@ const {
   addComment,
   deleteComment
 } = require("../controllers/posts");
-
 // --- THE FIX IS HERE ---
 // 1. Remove the curly braces { } because you used module.exports = ...
 // 2. Use the variable name 'authMiddleware' to match your file

@@ -11,9 +11,11 @@ connectDB();
 const app = express();
 app.use(cors());
 app.use(express.json());
-
 // --- ROUTES ---
-app.use("/api/auth", require("./routes/authRoutes"));
+const authRoutes = require("./routes/authRoutes");
+const userRoutes = require("./routes/userRoutes");
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api/posts", require("./routes/posts")); // <--- ADD THIS LINE
 
 const PORT = process.env.PORT || 5000;

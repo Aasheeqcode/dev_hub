@@ -1,193 +1,259 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, Code, Send, UserPlus, Check } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Copy, Check, Send } from 'lucide-react'; // Added Send
 import { GlassCard } from './GlassCard';
-import { NeonButton } from './NeonButton';
-interface Comment {
-  id: number;
-  author: string;
-  avatar: string;
-  text: string;
-  time: string;
+
+export interface PostProps {
+  _id: string;
+  userId: string;
+  name: string;
+  userTitle?: string;
+  userPicturePath?: string;
+  description: string;
+  title: string;
+  picturePath?: string;
+  postType?: 'general' | 'question' | 'showcase' | 'discussion';
+  codeSnippet?: string;
+  language?: string;
+  likes: Record<string, boolean>;
+  comments: any[];
+  // New props needed for functionality
+  token?: string | null;
+  currentUserId?: string;
 }
-interface PostProps {
-  id?: number;
-  author: {
-    id?: number;
-    name: string;
-    role: string;
-    avatar: string;
-    time: string;
-  };
-  content: {
-    text: string;
-    image?: string;
-    code?: {
-      language: string;
-      snippet: string;
-    };
-  };
-  stats: {
-    likes: number;
-    comments: number;
-    shares: number;
-  };
-  onComment?: (postId: number, text: string) => void;
-}
-export function PostCard({
-  id = 0,
-  author,
-  content,
-  stats,
-  onComment
-}: PostProps) {
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(stats.likes);
+
+export const PostCard: React.FC<PostProps> = ({
+  _id,
+  name,
+  userTitle,
+  userPicturePath,
+  title,
+  description,
+  picturePath,
+  postType = 'general',
+  codeSnippet,
+  language,
+  likes,
+  comments,
+  token,
+  currentUserId,
+}) => {
+  // Initialize like state based on if currentUserId exists in the likes object
+  const [isLiked, setIsLiked] = useState(Boolean(currentUserId && likes[currentUserId]));
+  const [likeCount, setLikeCount] = useState(Object.keys(likes || {}).length);
+  
+  // Comment States
   const [showComments, setShowComments] = useState(false);
-  const [commentText, setCommentText] = useState('');
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [comments, setComments] = useState<Comment[]>([{
-    id: 1,
-    author: 'David Miller',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80',
-    text: 'This looks amazing! Great work.',
-    time: '1h ago'
-  }]);
-  const handleLike = () => {
-    if (isLiked) {
-      setLikeCount(prev => prev - 1);
-    } else {
-      setLikeCount(prev => prev + 1);
-    }
+  const [commentText, setCommentText] = useState("");
+  const [postComments, setPostComments] = useState(comments || []);
+  const [isCommenting, setIsCommenting] = useState(false);
+  
+  const [copied, setCopied] = useState(false);
+
+  // --- LIKE LOGIC ---
+  const handleLike = async () => {
+    // Optimistic UI Update
     setIsLiked(!isLiked);
+    setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/posts/${_id}/like`, {
+        method: "PATCH",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId: currentUserId }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to like post");
+      }
+      
+      const updatedPost = await response.json();
+      // Optional: Sync exact count from server if needed
+      // setLikeCount(Object.keys(updatedPost.likes).length);
+    } catch (err) {
+      console.error("Like error:", err);
+      // Revert UI on error
+      setIsLiked(!isLiked);
+      setLikeCount(prev => !isLiked ? prev - 1 : prev + 1);
+    }
   };
-  const handleCommentSubmit = () => {
+
+  // --- COMMENT LOGIC ---
+  const handleComment = async () => {
     if (!commentText.trim()) return;
-    const newComment: Comment = {
-      id: comments.length + 1,
-      author: 'Madhan Annadurai',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80',
-      text: commentText,
-      time: 'Just now'
-    };
-    setComments([...comments, newComment]);
-    setCommentText('');
-    if (onComment) onComment(id, commentText);
+    setIsCommenting(true);
+
+    try {
+      // Assuming endpoint is POST /api/posts/:id/comment based on your structure
+      // NOTE: You might need to adjust the endpoint if your backend is different
+      const response = await fetch(`http://localhost:5000/api/posts/${_id}/comment`, {
+        method: "POST", // or PATCH depending on your backend
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ userId: currentUserId, comment: commentText }), 
+      });
+
+      if (response.ok) {
+        const updatedPost = await response.json();
+        // Update local comments list with the new data from server
+        // Assuming server returns the full updated post or the comments array
+        setPostComments(updatedPost.comments); 
+        setCommentText("");
+      }
+    } catch (err) {
+      console.error("Comment error:", err);
+    } finally {
+      setIsCommenting(false);
+    }
   };
-  return <GlassCard className="p-0 mb-6" hoverEffect>
+
+  const handleCopyCode = () => {
+    if (codeSnippet) {
+      navigator.clipboard.writeText(codeSnippet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'question': return 'text-orange-400 border-orange-400/30 bg-orange-400/10';
+      case 'showcase': return 'text-purple-400 border-purple-400/30 bg-purple-400/10';
+      case 'discussion': return 'text-blue-400 border-blue-400/30 bg-blue-400/10';
+      default: return 'text-gray-400 border-gray-400/30 bg-gray-400/10';
+    }
+  };
+  
+  return (
+    <GlassCard className="p-0 overflow-hidden hover:border-white/20 transition-colors mb-6">
       <div className="p-5">
         {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center space-x-3">
-            <Link to={`/user/${author.id || 1}`} className="relative group">
-              <img src={author.avatar} alt={author.name} className="w-10 h-10 rounded-full object-cover border border-white/10 group-hover:border-neon-blue transition-colors" />
-              <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-navy-900"></div>
-            </Link>
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex gap-3">
+            <div className="w-10 h-10 rounded-full bg-navy-800 overflow-hidden border border-white/10">
+              <img 
+                src={userPicturePath || `https://ui-avatars.com/api/?name=${name}&background=random`} 
+                alt={name} 
+                className="w-full h-full object-cover"
+              />
+            </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <Link to={`/user/${author.id || 1}`} className="font-semibold text-white text-sm hover:text-neon-blue cursor-pointer transition-colors">
-                  {author.name}
-                </Link>
-                <button onClick={() => setIsFollowing(!isFollowing)} className={`text-xs font-medium transition-colors ${isFollowing ? 'text-green-400' : 'text-neon-blue hover:text-white'}`}>
-                  {isFollowing ? '• Following' : '• Follow'}
-                </button>
-              </div>
-              <p className="text-xs text-gray-400">{author.role}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{author.time}</p>
+              <h3 className="font-bold text-white text-sm">{name}</h3>
+              <p className="text-xs text-gray-400">{userTitle || "Member"}</p>
             </div>
           </div>
-          <button className="text-gray-400 hover:text-white transition-colors">
-            <MoreHorizontal className="w-5 h-5" />
-          </button>
+          <button className="text-gray-500 hover:text-white"><MoreHorizontal className="w-5 h-5" /></button>
         </div>
 
         {/* Content */}
         <div className="mb-4">
-          <p className="text-gray-200 text-sm leading-relaxed whitespace-pre-line mb-3">
-            {content.text}
-          </p>
+           <div className="flex items-center gap-3 mb-2">
+             {postType !== 'general' && (
+               <span className={`text-[10px] px-2 py-0.5 rounded-full border uppercase tracking-wider font-medium ${getTypeColor(postType)}`}>
+                 {postType}
+               </span>
+             )}
+             <h2 className="text-lg font-bold text-white leading-tight">{title}</h2>
+           </div>
+          
+          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap mb-4">{description}</p>
 
-          {content.code && <div className="bg-navy-900/80 rounded-lg p-4 font-mono text-xs border border-white/10 overflow-x-auto mb-3 relative group">
-              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button className="p-1.5 rounded bg-white/10 hover:bg-white/20 text-gray-300">
-                  <Code className="w-4 h-4" />
+          {/* Code Snippet Block */}
+          {codeSnippet && (
+            <div className="relative group rounded-lg overflow-hidden bg-[#0d1117] border border-white/10 mb-4">
+              <div className="flex justify-between items-center px-4 py-2 bg-white/5 border-b border-white/5">
+                <span className="text-xs text-gray-400 font-mono">{language || 'text'}</span>
+                <button 
+                  onClick={handleCopyCode}
+                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? 'Copied!' : 'Copy'}
                 </button>
               </div>
-              <div className="flex items-center justify-between text-gray-500 text-[10px] uppercase mb-2 border-b border-white/5 pb-2">
-                <span>{content.code.language}</span>
-              </div>
-              <pre className="text-neon-blue/90">
-                <code>{content.code.snippet}</code>
+              <pre className="p-4 overflow-x-auto text-sm font-mono text-gray-300 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                <code>{codeSnippet}</code>
               </pre>
-            </div>}
+            </div>
+          )}
 
-          {content.image && <div className="rounded-lg overflow-hidden border border-white/5">
-              <img src={content.image} alt="Post content" className="w-full h-auto object-cover hover:scale-105 transition-transform duration-500" />
-            </div>}
+          {/* Image Attachment */}
+          {picturePath && (
+            <div className="rounded-lg overflow-hidden border border-white/10 mt-3">
+              <img src={`http://localhost:5000/assets/${picturePath}`} alt="Post content" className="w-full h-auto" />
+            </div>
+          )}
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center justify-between pt-4 border-t border-white/5">
-          <div className="flex items-center space-x-6">
-            <button onClick={handleLike} className={`flex items-center space-x-2 text-sm transition-colors ${isLiked ? 'text-neon-violet' : 'text-gray-400 hover:text-white'}`}>
-              <Heart className={`w-5 h-5 ${isLiked ? 'fill-neon-violet' : ''}`} />
-              <span>{likeCount}</span>
-            </button>
-            <button onClick={() => setShowComments(!showComments)} className="flex items-center space-x-2 text-sm text-gray-400 hover:text-white transition-colors">
-              <MessageCircle className="w-5 h-5" />
-              <span>{comments.length}</span>
-            </button>
-            <button className="flex items-center space-x-2 text-sm text-gray-400 hover:text-white transition-colors">
-              <Share2 className="w-5 h-5" />
-              <span>{stats.shares}</span>
-            </button>
-          </div>
-          <button className="text-gray-400 hover:text-neon-blue transition-colors">
-            <Bookmark className="w-5 h-5" />
+        {/* Footer Actions */}
+        <div className="flex items-center gap-6 pt-4 border-t border-white/5">
+          <button 
+            onClick={handleLike}
+            className={`flex items-center gap-2 text-sm transition-colors ${isLiked ? 'text-pink-500' : 'text-gray-400 hover:text-pink-400'}`}
+          >
+            <Heart className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} />
+            <span>{likeCount}</span>
+          </button>
+          
+          <button 
+            onClick={() => setShowComments(!showComments)}
+            className={`flex items-center gap-2 text-sm transition-colors ${showComments ? 'text-blue-400' : 'text-gray-400 hover:text-blue-400'}`}
+          >
+            <MessageCircle className="w-5 h-5" />
+            <span>{postComments.length}</span>
+          </button>
+
+          <button className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors ml-auto">
+            <Share2 className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Comments Section */}
-        <AnimatePresence>
-          {showComments && <motion.div initial={{
-          opacity: 0,
-          height: 0
-        }} animate={{
-          opacity: 1,
-          height: 'auto'
-        }} exit={{
-          opacity: 0,
-          height: 0
-        }} className="mt-4 pt-4 border-t border-white/5">
-              <div className="space-y-4 mb-4">
-                {comments.map(comment => <div key={comment.id} className="flex space-x-3">
-                    <img src={comment.avatar} alt={comment.author} className="w-8 h-8 rounded-full object-cover" />
-                    <div className="flex-1 bg-white/5 rounded-lg p-3">
-                      <div className="flex justify-between items-baseline mb-1">
-                        <span className="text-sm font-semibold text-white">
-                          {comment.author}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {comment.time}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-300">{comment.text}</p>
+        {/* --- NEW COMMENT SECTION --- */}
+        {showComments && (
+          <div className="mt-4 pt-4 border-t border-white/5 animate-in slide-in-from-top-2 duration-200">
+            {/* Comment List */}
+            <div className="space-y-3 mb-4 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
+              {postComments.length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-2">No comments yet. Be the first!</p>
+              ) : (
+                postComments.map((comment: any, index: number) => (
+                  <div key={index} className="bg-white/5 rounded p-3 text-sm border border-white/5">
+                    <div className="flex justify-between items-baseline mb-1">
+                      {/* Assuming comment structure, adjust based on your backend population */}
+                      <span className="font-bold text-gray-200 text-xs">{comment.name || comment.userId || "User"}</span> 
                     </div>
-                  </div>)}
-              </div>
+                    <p className="text-gray-300 text-xs">{comment.comment || comment}</p>
+                  </div>
+                ))
+              )}
+            </div>
 
-              <div className="flex items-center space-x-3">
-                <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&auto=format&fit=crop&w=100&q=80" alt="My Avatar" className="w-8 h-8 rounded-full object-cover" />
-                <div className="flex-1 relative">
-                  <input type="text" value={commentText} onChange={e => setCommentText(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleCommentSubmit()} placeholder="Write a comment..." className="w-full bg-navy-900/50 border border-white/10 rounded-full pl-4 pr-10 py-2 text-sm text-white focus:outline-none focus:border-neon-blue/50" />
-                  <button onClick={handleCommentSubmit} className="absolute right-2 top-1.5 text-neon-blue hover:text-white transition-colors">
-                    <Send className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            </motion.div>}
-        </AnimatePresence>
+            {/* Comment Input */}
+            <div className="flex gap-2 relative">
+              <input 
+                type="text" 
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                placeholder="Write a comment..."
+                className="flex-1 bg-navy-900/50 border border-white/10 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors"
+                onKeyDown={(e) => e.key === 'Enter' && handleComment()}
+              />
+              <button 
+                onClick={handleComment}
+                disabled={!commentText.trim() || isCommenting}
+                className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
-    </GlassCard>;
-}
+    </GlassCard>
+  );
+};

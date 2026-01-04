@@ -4,28 +4,47 @@ const User = require("../models/User"); // Ensure you have this User model
 /* CREATE */
 exports.createPost = async (req, res) => {
   try {
-    const { userId, title, description, picturePath, codeSnippet, language, postType } = req.body;
+    const { title, description, picturePath, postType, codeSnippet, language } = req.body;
+
+    // 1. Basic Validation
+    if (!title || !description) {
+      return res.status(400).json({ message: "Title and Description are required." });
+    }
+
+    // 2. Find User (to get name/avatar)
+    const userId = req.user.id;
     const user = await User.findById(userId);
-    
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // 3. Create Post (Matching your Schema)
     const newPost = new Post({
       userId,
       name: user.name,
-      userPicturePath: user.picturePath || "",
-      userTitle: user.occupation || "Developer", // Fallback if occupation is missing
+      userPicturePath: user.picturePath || "", // Safe fallback
+      userTitle: user.occupation || "Developer", // Matches userTitle in Schema
+      
       title,
       description,
-      picturePath,
-      codeSnippet,
-      language,
-      postType,
+      picturePath: picturePath || "",
+      
+      // 4. Validate Enums (Critical for 409 fix)
+      postType: postType ? postType.toLowerCase() : "general",
+      codeSnippet: codeSnippet || "",
+      language: language ? language.toLowerCase() : "text",
+      
       likes: {},
-      comments: [],
+      comments: []
     });
 
     await newPost.save();
-    const post = await Post.find().sort({ createdAt: -1 });
-    res.status(201).json(post);
+
+    // 5. Return updated feed
+    const posts = await Post.find().sort({ createdAt: -1 });
+    res.status(201).json(posts);
+
   } catch (err) {
+    // Log the EXACT error to your terminal so you can see it
+    console.error("Post Save Error:", err.message); 
     res.status(409).json({ message: err.message });
   }
 };
