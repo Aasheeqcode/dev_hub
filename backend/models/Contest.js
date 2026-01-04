@@ -1,41 +1,30 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
 const QuestionSchema = new mongoose.Schema({
-  description: { type: String },
-  testCaseFile: { type: String }, // URL or Text content for now
-  score: { type: Number }
+  questionText: String,
+  options: [String], // Array of 4 strings
+  correctOptionIndex: Number // 0-3
 });
 
-const ContestSchema = new mongoose.Schema(
-  {
-    hostId: { type: String, required: true },
-    hostName: { type: String, required: true },
-    title: { type: String, required: true },
-    type: { 
-      type: String, 
-      enum: ["contest", "meet"], 
-      required: true 
-    },
-    scope: { 
-      type: String, 
-      enum: ["public", "private", "custom"], 
-      default: "public" 
-    },
-    allowedUsers: [String], // Array of UserIDs for 'custom' scope
-    
-    // Contest Specifics
-    questions: [QuestionSchema],
-    startTime: { type: Date, required: true },
-    duration: { type: Number, required: true }, // In minutes
-    
-    // Status
-    status: { 
-      type: String, 
-      enum: ["upcoming", "ongoing", "completed"], 
-      default: "upcoming" 
-    }
+const ContestSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  type: { 
+    type: String, 
+    enum: ['coding', 'hackathon', 'quiz', 'event'], 
+    required: true 
   },
-  { timestamps: true }
-);
+  startDate: { type: Date, required: true },
+  endDate: { type: Date, required: true },
+  
+  // Specific to Hackathons
+  resourceLink: { type: String }, // Link to PDF or Repo
 
-module.exports = mongoose.model("Contest", ContestSchema);
+  // Specific to Quizzes
+  questions: [QuestionSchema],
+  
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model('Contest', ContestSchema);

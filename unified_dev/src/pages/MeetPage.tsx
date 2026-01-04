@@ -1,381 +1,438 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Video, VideoOff, Monitor, MessageSquare, Users, PhoneOff, Settings, PenTool, Languages, Copy, Plus, Check, ArrowRight, Calendar, Clock, Link as LinkIcon, X } from 'lucide-react';
-import { GlassCard } from '../components/GlassCard';
-import { NeonButton } from '../components/NeonButton';
+import { 
+  Mic, MicOff, Video, VideoOff, Monitor, MessageSquare, 
+  Users, Settings, PenTool, Copy, Plus, ArrowRight, Link as LinkIcon 
+} from 'lucide-react';
+
+// Stream Imports
+import {
+  StreamVideo,
+  StreamVideoClient,
+  StreamCall,
+  StreamTheme,
+  SpeakerLayout,
+  useCallStateHooks,
+  useCall,
+} from '@stream-io/video-react-sdk';
+import '@stream-io/video-react-sdk/dist/css/styles.css';
+
+// --- CONFIGURATION ---
+const API_KEY = "g8yr2x3wgybz"; // Replace with your actual key
+
+// --- HELPER: Get User Safe ---
+const getUserFromStorage = () => {
+  try {
+    const userStr = localStorage.getItem("user");
+    if (!userStr) return null;
+    
+    const parsed = JSON.parse(userStr);
+    
+    // CRITICAL: Handle both 'id' (Stream) and '_id' (MongoDB)
+    const validId = parsed.id || parsed._id; 
+
+    if (!validId) return null;
+
+    return {
+      id: validId.toString(),
+      name: parsed.name || "Unknown",
+      image: parsed.image || `https://getstream.io/random_png/?id=${validId}&name=${parsed.name}`,
+    };
+  } catch (err) {
+    console.error("Error reading user from storage", err);
+    return null;
+  }
+};
+
 type MeetingMode = 'home' | 'create' | 'join' | 'meeting';
-export function MeetPage() {
+
+export default function MeetPage() {
   const [mode, setMode] = useState<MeetingMode>('home');
-  const [micOn, setMicOn] = useState(true);
-  const [cameraOn, setCameraOn] = useState(true);
   const [meetingTitle, setMeetingTitle] = useState('');
-  const [meetingCode, setMeetingCode] = useState('');
   const [generatedMeetingId, setGeneratedMeetingId] = useState('');
   const [copied, setCopied] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
-  // Generate random meeting ID
+  
+  // Stream State
+  const [client, setClient] = useState<StreamVideoClient | null>(null);
+  const [call, setCall] = useState<any>(null);
+  
+  // Settings
+  const [initialMicOn, setInitialMicOn] = useState(true);
+  const [initialCamOn, setInitialCamOn] = useState(true);
+
+  // --- LOGIC: Initialize Call ---
+  const initializeCall = async (callId: string) => {
+    const storedUser = getUserFromStorage();
+    
+    if (!storedUser) {
+      alert("User not found. Please Log In.");
+      return; 
+    }
+
+    setIsJoining(true);
+
+    try {
+      // 1. Setup Client
+      const newClient = new StreamVideoClient({ apiKey: API_KEY });
+
+      // 2. Token Provider (Fetches from your Backend)
+      const tokenProvider = async () => {
+        const response = await fetch("http://localhost:5000/api/auth/stream-token", {
+          headers: {
+            "Authorization": `Bearer ${localStorage.getItem("token")}`
+          }
+        });
+        
+        if (!response.ok) throw new Error("Failed to get token");
+        
+        const data = await response.json();
+        return data.token;
+      };
+
+      // 3. Connect User
+      await newClient.connectUser(storedUser, tokenProvider);
+
+      // 4. Create/Join Call
+      const newCall = newClient.call("default", callId);
+      await newCall.join({ create: true });
+
+      // 5. Apply Initial Settings
+      if (!initialMicOn) await newCall.microphone.disable();
+      if (!initialCamOn) await newCall.camera.disable();
+
+      setClient(newClient);
+      setCall(newCall);
+      setMode('meeting');
+
+    } catch (error) {
+      console.error("Failed to join meeting", error);
+      alert(`Connection Failed: ${(error as Error).message}`);
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  // --- HANDLERS ---
   const generateMeetingId = () => {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     let id = '';
-    for (let i = 0; i < 10; i++) {
-      id += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
+    for (let i = 0; i < 10; i++) id += chars.charAt(Math.floor(Math.random() * chars.length));
     return id;
   };
-  const handleCreateMeeting = () => {
+
+  const handleCreateSetup = () => {
     const id = generateMeetingId();
     setGeneratedMeetingId(id);
     setMode('create');
   };
+
+  const handleStartMeeting = () => {
+    initializeCall(generatedMeetingId);
+  };
+
+  const handleJoinMeeting = () => {
+    if (joinCode.length >= 1) {
+      initializeCall(joinCode);
+    }
+  };
+
+  const handleLeaveMeeting = async () => {
+    if (call) await call.leave();
+    if (client) await client.disconnectUser();
+    setCall(null);
+    setClient(null);
+    setMode('home');
+    setMeetingTitle('');
+    setJoinCode('');
+    setGeneratedMeetingId('');
+  };
+
   const handleCopyLink = () => {
     const link = `https://devhub.meet/${generatedMeetingId}`;
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-  const handleStartMeeting = () => {
-    setMode('meeting');
-  };
-  const handleJoinMeeting = () => {
-    if (joinCode.length >= 6) {
-      setIsJoining(true);
-      // Simulate joining delay
-      setTimeout(() => {
-        setIsJoining(false);
-        setMode('meeting');
-      }, 1500);
-    }
-  };
-  const handleLeaveMeeting = () => {
-    setMode('home');
-    setMeetingTitle('');
-    setJoinCode('');
-    setGeneratedMeetingId('');
-  };
-  // Home View
-  if (mode === 'home') {
-    return <div className="min-h-[calc(100vh-64px)] flex items-center justify-center p-4">
-        <div className="max-w-6xl w-full">
-          <motion.div initial={{
-          opacity: 0,
-          y: 20
-        }} animate={{
-          opacity: 1,
-          y: 0
-        }} className="text-center mb-12">
-            <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight mb-4">
-              Premium Video Meetings for{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon-violet to-neon-blue">
-                Developers
-              </span>
-            </h1>
-            <p className="text-gray-400 text-xl max-w-2xl mx-auto">
-              Collaborate with your team using high-quality video, screen
-              sharing, and real-time code whiteboard.
-            </p>
-          </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-            {/* Create Meeting Card */}
-            <motion.div initial={{
-            opacity: 0,
-            x: -20
-          }} animate={{
-            opacity: 1,
-            x: 0
-          }} transition={{
-            delay: 0.1
-          }}>
-              <GlassCard className="p-8 h-full" hoverEffect>
-                <div className="flex flex-col h-full">
-                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-neon-violet to-neon-blue flex items-center justify-center mb-4">
-                    <Video className="w-7 h-7 text-white" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-white mb-3">
-                    Create Meeting
-                  </h3>
-                  <p className="text-gray-400 mb-6 flex-1">
-                    Start an instant meeting or schedule one for later. Share
-                    the link with your team.
-                  </p>
-                  <NeonButton onClick={handleCreateMeeting} className="w-full" icon={<Plus className="w-5 h-5" />}>
-                    New Meeting
-                  </NeonButton>
-                </div>
-              </GlassCard>
-            </motion.div>
 
-            {/* Join Meeting Card */}
-            <motion.div initial={{
-            opacity: 0,
-            x: 20
-          }} animate={{
-            opacity: 1,
-            x: 0
-          }} transition={{
-            delay: 0.2
-          }}>
-              <GlassCard className="p-8 h-full" hoverEffect>
-                <div className="flex flex-col h-full">
-                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-neon-blue to-neon-violet flex items-center justify-center mb-4">
-                    <Users className="w-7 h-7 text-white" />
-                  </div>
-                  <h3 className="text-2xl font-bold text-white mb-3">
-                    Join Meeting
-                  </h3>
-                  <p className="text-gray-400 mb-6 flex-1">
-                    Enter a meeting code to join an existing session.
-                  </p>
-                  <NeonButton onClick={() => setMode('join')} variant="secondary" className="w-full" icon={<ArrowRight className="w-5 h-5" />}>
-                    Join with Code
-                  </NeonButton>
-                </div>
-              </GlassCard>
-            </motion.div>
+  // --- VIEW: MEETING ROOM (Active Call) ---
+  if (mode === 'meeting' && client && call) {
+    return (
+      <StreamVideo client={client}>
+        <StreamCall call={call}>
+           <CustomMeetingRoom 
+              meetingTitle={meetingTitle}
+              meetingId={generatedMeetingId || joinCode}
+              onLeave={handleLeaveMeeting}
+           />
+        </StreamCall>
+      </StreamVideo>
+    );
+  }
+
+  // --- VIEW: LOADING SCREEN ---
+  if (isJoining) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+         <div className="text-cyan-400 text-xl font-mono animate-pulse">Connecting to Secure Channel...</div>
+      </div>
+    );
+  }
+
+  // --- VIEW: HOME / CREATE / JOIN ---
+  return (
+    <div className="min-h-[calc(100vh-64px)] p-6 bg-slate-950 text-white font-sans">
+      <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center h-full">
+        
+        {/* Left Side: Hero Text */}
+        <div className="space-y-8">
+          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-sm">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+            </span>
+            <span>Secure HD Video Conferencing</span>
+          </div>
+          
+          <h1 className="text-5xl lg:text-7xl font-bold tracking-tight">
+            Connect with <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-600">
+              DevHub Meet
+            </span>
+          </h1>
+          
+          <p className="text-slate-400 text-lg max-w-lg">
+            Crystal clear video, immersive collaboration tools, and secure channels built for developers.
+          </p>
+
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-4">
+            <button 
+              onClick={handleCreateSetup}
+              className="px-8 py-4 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-xl font-bold text-white shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              New Meeting
+            </button>
+            
+            <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded-xl border border-slate-800">
+              <div className="pl-4">
+                <LinkIcon className="w-5 h-5 text-slate-400" />
+              </div>
+              <input 
+                type="text" 
+                placeholder="Enter code to join"
+                className="bg-transparent border-none focus:ring-0 text-white w-40 placeholder:text-slate-600"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+              />
+              <button 
+                onClick={handleJoinMeeting}
+                disabled={!joinCode}
+                className="p-3 bg-slate-800 hover:bg-slate-700 rounded-lg text-cyan-400 transition-colors disabled:opacity-50"
+              >
+                <ArrowRight className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
-      </div>;
-  }
-  // Create Meeting View
-  if (mode === 'create') {
-    return <div className="min-h-[calc(100vh-64px)] flex items-center justify-center p-4">
-        <motion.div initial={{
-        opacity: 0,
-        scale: 0.95
-      }} animate={{
-        opacity: 1,
-        scale: 1
-      }} className="max-w-2xl w-full">
-          <GlassCard className="p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-3xl font-bold text-white">Create Meeting</h2>
-              <button onClick={() => setMode('home')} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
 
-            <div className="space-y-6">
-              {/* Meeting Title */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Meeting Title (Optional)
-                </label>
-                <input type="text" value={meetingTitle} onChange={e => setMeetingTitle(e.target.value)} placeholder="e.g., Team Standup, Code Review..." className="w-full bg-navy-900/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/50 transition-all" />
-              </div>
+        {/* Right Side: Interactive Cards */}
+        <div className="relative h-[600px] hidden lg:flex items-center justify-center">
+          
+          {/* Background Blobs */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-cyan-500/20 rounded-full blur-[100px]" />
 
-              {/* Generated Meeting ID */}
-              <div className="bg-navy-900/50 rounded-xl p-6 border border-white/10">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="text-sm text-gray-400 mb-1">Meeting ID</p>
-                    <p className="text-2xl font-mono font-bold text-white tracking-wider">
-                      {generatedMeetingId}
-                    </p>
+          <AnimatePresence mode="wait">
+            {mode === 'home' && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="relative z-10 w-full max-w-md"
+              >
+                <div className="bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+                  <div className="aspect-video rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 mb-6 flex items-center justify-center border border-white/5">
+                    <div className="flex gap-4">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="w-12 h-12 rounded-full bg-slate-700/50 animate-pulse" style={{ animationDelay: `${i * 0.2}s` }} />
+                      ))}
+                    </div>
                   </div>
-                  <button onClick={handleCopyLink} className="p-3 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-all group">
-                    {copied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
+                  <div className="space-y-4">
+                    <div className="h-4 bg-slate-800 rounded w-3/4" />
+                    <div className="h-4 bg-slate-800 rounded w-1/2" />
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {mode === 'create' && (
+              <motion.div 
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -50 }}
+                className="relative z-10 w-full max-w-md bg-slate-900/80 backdrop-blur-xl border border-cyan-500/30 rounded-3xl p-8 shadow-2xl"
+              >
+                <h3 className="text-2xl font-bold mb-6">Meeting Ready</h3>
+                
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-400">Meeting ID</label>
+                    <div className="flex gap-2">
+                      <div className="flex-1 bg-slate-950 p-4 rounded-xl font-mono text-cyan-400 border border-slate-800">
+                        {generatedMeetingId}
+                      </div>
+                      <button 
+                        onClick={handleCopyLink}
+                        className="p-4 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors text-white"
+                      >
+                        {copied ? <CheckIcon /> : <Copy className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm text-slate-400">Meeting Title (Optional)</label>
+                    <input 
+                      type="text"
+                      className="w-full bg-slate-950 p-4 rounded-xl border border-slate-800 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 outline-none transition-all"
+                      placeholder="e.g. Daily Standup"
+                      value={meetingTitle}
+                      onChange={(e) => setMeetingTitle(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="flex gap-4 pt-4">
+                     <button 
+                       onClick={() => setInitialMicOn(!initialMicOn)}
+                       className={`flex-1 p-4 rounded-xl flex items-center justify-center gap-2 border transition-all ${initialMicOn ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
+                     >
+                        {initialMicOn ? <Mic className="w-5 h-5"/> : <MicOff className="w-5 h-5"/>}
+                        {initialMicOn ? "Mic On" : "Mic Off"}
+                     </button>
+                     <button 
+                       onClick={() => setInitialCamOn(!initialCamOn)}
+                       className={`flex-1 p-4 rounded-xl flex items-center justify-center gap-2 border transition-all ${initialCamOn ? 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
+                     >
+                        {initialCamOn ? <Video className="w-5 h-5"/> : <VideoOff className="w-5 h-5"/>}
+                        {initialCamOn ? "Cam On" : "Cam Off"}
+                     </button>
+                  </div>
+
+                  <button 
+                    onClick={handleStartMeeting}
+                    className="w-full py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-xl transition-all shadow-lg shadow-cyan-500/25"
+                  >
+                    Join Now
                   </button>
                 </div>
-                <div className="flex items-center space-x-2 text-sm text-gray-400">
-                  <LinkIcon className="w-4 h-4" />
-                  <span className="font-mono">
-                    https://devhub.meet/{generatedMeetingId}
-                  </span>
-                </div>
-              </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-              {/* Meeting Settings */}
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-gray-400">
-                  Join Settings
-                </p>
-                <div className="flex items-center justify-between p-4 bg-navy-900/50 rounded-lg border border-white/10">
-                  <div className="flex items-center space-x-3">
-                    <Mic className="w-5 h-5 text-neon-blue" />
-                    <span className="text-white">Microphone</span>
-                  </div>
-                  <button onClick={() => setMicOn(!micOn)} className={`relative w-12 h-6 rounded-full transition-colors ${micOn ? 'bg-neon-blue' : 'bg-white/10'}`}>
-                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${micOn ? 'translate-x-6' : ''}`} />
-                  </button>
-                </div>
-                <div className="flex items-center justify-between p-4 bg-navy-900/50 rounded-lg border border-white/10">
-                  <div className="flex items-center space-x-3">
-                    <Video className="w-5 h-5 text-neon-violet" />
-                    <span className="text-white">Camera</span>
-                  </div>
-                  <button onClick={() => setCameraOn(!cameraOn)} className={`relative w-12 h-6 rounded-full transition-colors ${cameraOn ? 'bg-neon-violet' : 'bg-white/10'}`}>
-                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${cameraOn ? 'translate-x-6' : ''}`} />
-                  </button>
-                </div>
-              </div>
+// --- SUB-COMPONENT: Custom Meeting Room UI ---
+const CustomMeetingRoom = ({ meetingTitle, meetingId, onLeave }: { meetingTitle: string, meetingId: string, onLeave: () => void }) => {
+  const call = useCall();
+  const { useMicrophoneState, useCameraState, useParticipantCount } = useCallStateHooks();
+  
+  const { isEnabled: isMicEnabled } = useMicrophoneState();
+  const { isEnabled: isCamEnabled } = useCameraState();
+  const participantCount = useParticipantCount();
 
-              {/* Action Buttons */}
-              <div className="flex space-x-3 pt-4">
-                <NeonButton onClick={handleStartMeeting} className="flex-1" icon={<Video className="w-5 h-5" />}>
-                  Start Meeting Now
-                </NeonButton>
-                <NeonButton variant="secondary" onClick={() => setMode('home')} className="px-6">
-                  Cancel
-                </NeonButton>
-              </div>
-            </div>
-          </GlassCard>
-        </motion.div>
-      </div>;
-  }
-  // Join Meeting View
-  if (mode === 'join') {
-    return <div className="min-h-[calc(100vh-64px)] flex items-center justify-center p-4">
-        <motion.div initial={{
-        opacity: 0,
-        scale: 0.95
-      }} animate={{
-        opacity: 1,
-        scale: 1
-      }} className="max-w-2xl w-full">
-          <GlassCard className="p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-3xl font-bold text-white">Join Meeting</h2>
-              <button onClick={() => setMode('home')} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+  const toggleMic = () => call?.microphone.toggle();
+  const toggleCam = () => call?.camera.toggle();
 
-            <div className="space-y-6">
-              {/* Meeting Code Input */}
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-2">
-                  Meeting Code
-                </label>
-                <input type="text" value={joinCode} onChange={e => setJoinCode(e.target.value.toLowerCase())} placeholder="Enter 10-digit meeting code" className="w-full bg-navy-900/50 border border-white/10 rounded-xl px-4 py-4 text-white text-center text-2xl font-mono tracking-widest placeholder-gray-500 focus:outline-none focus:border-neon-blue/50 focus:ring-1 focus:ring-neon-blue/50 transition-all" maxLength={10} />
-                {joinCode.length > 0 && joinCode.length < 6 && <p className="text-sm text-red-400 mt-2">
-                    Code must be at least 6 characters
-                  </p>}
-              </div>
-
-              {/* Join Settings */}
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-gray-400">
-                  Join Settings
-                </p>
-                <div className="flex items-center justify-between p-4 bg-navy-900/50 rounded-lg border border-white/10">
-                  <div className="flex items-center space-x-3">
-                    <Mic className="w-5 h-5 text-neon-blue" />
-                    <span className="text-white">Microphone</span>
-                  </div>
-                  <button onClick={() => setMicOn(!micOn)} className={`relative w-12 h-6 rounded-full transition-colors ${micOn ? 'bg-neon-blue' : 'bg-white/10'}`}>
-                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${micOn ? 'translate-x-6' : ''}`} />
-                  </button>
-                </div>
-                <div className="flex items-center justify-between p-4 bg-navy-900/50 rounded-lg border border-white/10">
-                  <div className="flex items-center space-x-3">
-                    <Video className="w-5 h-5 text-neon-violet" />
-                    <span className="text-white">Camera</span>
-                  </div>
-                  <button onClick={() => setCameraOn(!cameraOn)} className={`relative w-12 h-6 rounded-full transition-colors ${cameraOn ? 'bg-neon-violet' : 'bg-white/10'}`}>
-                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${cameraOn ? 'translate-x-6' : ''}`} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex space-x-3 pt-4">
-                <NeonButton onClick={handleJoinMeeting} className="flex-1" disabled={joinCode.length < 6 || isJoining} isLoading={isJoining} icon={!isJoining ? <ArrowRight className="w-5 h-5" /> : undefined}>
-                  {isJoining ? 'Joining...' : 'Join Meeting'}
-                </NeonButton>
-                <NeonButton variant="secondary" onClick={() => setMode('home')} className="px-6" disabled={isJoining}>
-                  Cancel
-                </NeonButton>
-              </div>
-            </div>
-          </GlassCard>
-        </motion.div>
-      </div>;
-  }
-  // Meeting View
-  return <div className="h-[calc(100vh-64px)] flex flex-col bg-navy-900">
-      {/* Main Video Grid */}
-      <div className="flex-1 p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto">
-        {/* Active Speaker (Larger) */}
-        <motion.div initial={{
-        opacity: 0,
-        scale: 0.9
-      }} animate={{
-        opacity: 1,
-        scale: 1
-      }} className="col-span-2 row-span-2 relative rounded-xl overflow-hidden border-2 border-neon-blue shadow-neon-blue">
-          <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80" alt="Active Speaker" className="w-full h-full object-cover" />
-          <div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-md px-3 py-1 rounded-lg text-white text-sm font-medium flex items-center space-x-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span>Alex Coder (You)</span>
-          </div>
-        </motion.div>
-
-        {/* Other Participants */}
-        {[1, 2, 3, 4, 5].map(i => <motion.div key={i} initial={{
-        opacity: 0,
-        scale: 0.9
-      }} animate={{
-        opacity: 1,
-        scale: 1
-      }} transition={{
-        delay: i * 0.1
-      }} className="relative rounded-xl overflow-hidden border border-white/5 bg-navy-800">
-            <img src={`https://images.unsplash.com/photo-${1500000000000 + i}?ixlib=rb-1.2.1&auto=format&fit=crop&w=400&q=80`} alt="Participant" className="w-full h-full object-cover opacity-80" />
-            <div className="absolute bottom-3 left-3 bg-black/50 backdrop-blur-md px-2 py-1 rounded text-white text-xs">
-              Participant {i}
-            </div>
-            <div className="absolute top-3 right-3 bg-black/50 p-1 rounded-full">
-              <MicOff className="w-3 h-3 text-red-500" />
-            </div>
-          </motion.div>)}
+  return (
+    <div className="h-screen w-full flex flex-col bg-slate-950 text-white">
+      
+      {/* 1. Main Video Grid */}
+      <div className="flex-1 w-full relative overflow-hidden">
+         <StreamTheme>
+            {/* Stream's SpeakerLayout handles the complex grid logic */}
+            <SpeakerLayout participantsBarPosition="bottom" />
+         </StreamTheme>
       </div>
 
-      {/* Control Bar */}
-      <div className="h-20 bg-navy-800/80 backdrop-blur-xl border-t border-white/5 px-4 flex items-center justify-between">
-        <div className="flex items-center space-x-4 text-white font-medium">
-          <span>12:45 PM</span>
-          <span className="text-gray-500">|</span>
-          <span>{meetingTitle || 'Meeting'}</span>
-          {generatedMeetingId && <>
-              <span className="text-gray-500">|</span>
-              <span className="font-mono text-sm text-gray-400">
-                {generatedMeetingId}
-              </span>
-            </>}
+      {/* 2. Custom Control Bar */}
+      <div className="h-20 bg-slate-900/90 backdrop-blur-md border-t border-white/5 px-6 flex items-center justify-between z-50">
+        
+        {/* Left: Meeting Info */}
+        <div className="flex items-center space-x-4 text-white font-medium hidden md:flex">
+          <span className="text-slate-400 font-mono text-sm">{meetingId}</span>
+          <span className="text-slate-600">|</span>
+          <span>{meetingTitle || 'Untitled Meeting'}</span>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <button onClick={() => setMicOn(!micOn)} className={`p-3 rounded-full transition-all ${micOn ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500/20 text-red-500 border border-red-500/50'}`}>
-            {micOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-          </button>
-          <button onClick={() => setCameraOn(!cameraOn)} className={`p-3 rounded-full transition-all ${cameraOn ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-red-500/20 text-red-500 border border-red-500/50'}`}>
-            {cameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-          </button>
-          <button className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all">
+        {/* Center: Controls */}
+        <div className="flex items-center gap-4">
+          <ControlButton 
+             isActive={isMicEnabled} 
+             onClick={toggleMic} 
+             onIcon={<Mic className="w-5 h-5" />} 
+             offIcon={<MicOff className="w-5 h-5" />}
+             dangerOff
+          />
+          
+          <ControlButton 
+             isActive={isCamEnabled} 
+             onClick={toggleCam} 
+             onIcon={<Video className="w-5 h-5" />} 
+             offIcon={<VideoOff className="w-5 h-5" />}
+             dangerOff
+          />
+
+          <button onClick={() => call?.screenShare.toggle()} className="p-4 rounded-full bg-slate-800 hover:bg-slate-700 text-white transition-all">
             <Monitor className="w-5 h-5" />
           </button>
-          <button className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all">
-            <PenTool className="w-5 h-5" />
-          </button>
-          <button className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-all">
-            <Languages className="w-5 h-5" />
-          </button>
-          <button onClick={handleLeaveMeeting} className="px-6 py-2.5 rounded-full bg-red-500 hover:bg-red-600 text-white font-medium transition-colors ml-4">
+
+          <button onClick={onLeave} className="px-8 py-3 rounded-full bg-red-500 hover:bg-red-600 text-white font-bold transition-colors ml-4 shadow-lg shadow-red-500/20">
             Leave
           </button>
         </div>
 
+        {/* Right: Info */}
         <div className="flex items-center space-x-3">
-          <button className="p-3 rounded-full bg-white/5 hover:bg-white/10 text-gray-300 transition-all relative">
-            <MessageSquare className="w-5 h-5" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-neon-blue rounded-full"></span>
-          </button>
-          <button className="p-3 rounded-full bg-white/5 hover:bg-white/10 text-gray-300 transition-all">
+          <button className="p-3 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all flex items-center gap-2">
             <Users className="w-5 h-5" />
+            <span className="text-sm font-bold">{participantCount}</span>
+          </button>
+          
+          <button className="p-3 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all">
+             <Settings className="w-5 h-5" />
           </button>
         </div>
+
       </div>
-    </div>;
-}
+    </div>
+  );
+};
+
+// Simple Helper Component for Buttons
+const ControlButton = ({ isActive, onClick, onIcon, offIcon, dangerOff }: any) => (
+  <button 
+    onClick={onClick} 
+    className={`p-4 rounded-full transition-all duration-200 ${
+      isActive 
+        ? 'bg-slate-800 hover:bg-slate-700 text-white' 
+        : dangerOff 
+          ? 'bg-red-500/20 text-red-500 border border-red-500/50' 
+          : 'bg-slate-800 text-slate-500'
+    }`}
+  >
+    {isActive ? onIcon : offIcon}
+  </button>
+);
+
+const CheckIcon = () => (
+  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+  </svg>
+);

@@ -14,10 +14,11 @@ app.use(express.json());
 // --- ROUTES ---
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
+const contestRoutes = require('./routes/contestRoutes');
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/posts", require("./routes/posts")); // <--- ADD THIS LINE
-
+app.use('/api/contests', contestRoutes);
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

@@ -1,13 +1,13 @@
-// src/pages/AuthPage.tsx (or wherever you keep this file)
+// src/pages/AuthPage.tsx
 
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom"; // Import for redirection
+import { useNavigate } from "react-router-dom"; 
 
 export default function AuthPage() {
   const navigate = useNavigate();
   const [isSignIn, setIsSignIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(false); // New loading state
-  const [apiError, setApiError] = useState(""); // State for backend errors
+  const [isLoading, setIsLoading] = useState(false); 
+  const [apiError, setApiError] = useState(""); 
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -26,7 +26,6 @@ export default function AuthPage() {
       ...prev,
       [name]: value,
     }));
-    // Clear errors when user types
     setApiError("");
     setErrors((prev) => ({ ...prev, [name]: false }));
   };
@@ -47,16 +46,15 @@ export default function AuthPage() {
     // 2. Prepare API Request
     setIsLoading(true);
     
-    // Determine Endpoint
+    // Check your backend port! (Defaulting to 5000 based on your code)
     const endpoint = isSignIn 
       ? "http://localhost:5000/api/auth/login" 
       : "http://localhost:5000/api/auth/register";
 
-    // specific payload based on mode
     const payload = isSignIn
       ? { email: formData.email, password: formData.password }
       : { 
-          name: formData.fullName, // Mapping fullName to name (common backend convention)
+          name: formData.fullName, 
           email: formData.email, 
           password: formData.password 
         };
@@ -79,18 +77,26 @@ export default function AuthPage() {
       // 3. Success Handling
       console.log("Auth Success:", data);
       
-      // Save Token (Adjust 'token' key based on your actual backend response)
+      // --- CRITICAL UPDATE FOR STREAM ---
+      // We must save the token AND the user object correctly
       if (data.token) {
         localStorage.setItem("token", data.token);
         
-        // Optional: Save user info if needed
         if (data.user) {
-            localStorage.setItem("user", JSON.stringify(data.user));
+           // We force the ID to be a string to avoid object/parsing issues later
+           const safeUser = {
+               id: data.user.id || data.user._id,
+               name: data.user.name,
+               email: data.user.email,
+               image: data.user.image || `https://getstream.io/random_png/?id=${data.user._id}&name=${data.user.name}`
+           };
+           localStorage.setItem("user", JSON.stringify(safeUser));
         }
       }
+      // ----------------------------------
 
-      // Redirect to Home
-      navigate("/home");
+      // Redirect to your Meet page or Home
+      navigate("/home"); 
 
     } catch (err: any) {
       console.error("Auth Error:", err);
@@ -111,7 +117,6 @@ export default function AuthPage() {
     <div className="min-h-screen flex bg-slate-950">
       {/* Left Side - Branding */}
       <div className="hidden lg:flex w-1/2 flex-col justify-center items-center text-white px-12 relative overflow-hidden">
-         {/* Optional: Add a subtle background gradient or pattern here */}
          <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-slate-900/20 z-0"></div>
          
          <div className="relative z-10 text-center">
