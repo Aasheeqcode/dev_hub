@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Heart, MessageCircle, Share2, MoreHorizontal, Copy, Check, Send } from 'lucide-react'; // Added Send
 import { GlassCard } from './GlassCard';
-
+import { API_BASE_URL } from '../config';
 export interface PostProps {
   _id: string;
   userId: string;
@@ -56,7 +56,7 @@ export const PostCard: React.FC<PostProps> = ({
     setLikeCount(prev => isLiked ? prev - 1 : prev + 1);
 
     try {
-      const response = await fetch(`http://localhost:5000/api/posts/${_id}/like`, {
+      const response = await fetch(`${API_BASE_URL}/api/posts/${_id}/like`, {
         method: "PATCH",
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -88,7 +88,7 @@ export const PostCard: React.FC<PostProps> = ({
     try {
       // Assuming endpoint is POST /api/posts/:id/comment based on your structure
       // NOTE: You might need to adjust the endpoint if your backend is different
-      const response = await fetch(`http://localhost:5000/api/posts/${_id}/comment`, {
+      const response = await fetch(`${API_BASE_URL}/api/posts/${_id}/comment`, {
         method: "POST", // or PATCH depending on your backend
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -184,7 +184,7 @@ export const PostCard: React.FC<PostProps> = ({
           {/* Image Attachment */}
           {picturePath && (
             <div className="rounded-lg overflow-hidden border border-white/10 mt-3">
-              <img src={`http://localhost:5000/assets/${picturePath}`} alt="Post content" className="w-full h-auto" />
+              <img src={`${API_BASE_URL}/assets/${picturePath}`} alt="Post content" className="w-full h-auto" />
             </div>
           )}
         </div>

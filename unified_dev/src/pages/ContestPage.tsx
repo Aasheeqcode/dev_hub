@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'; // For redirect after success
 import { Trophy, Code2, Brain, Calendar, Upload, Plus, Trash2, Save, Loader2 } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard';
 import { NeonButton } from '../components/NeonButton';
+import { API_BASE_URL } from '../config';
 
 // --- TYPES ---
 interface Question {
@@ -87,7 +88,7 @@ export default function ContestPage() {
         })) : undefined
       };
 
-      const res = await fetch('http://localhost:5000/api/contests/create', {
+      const res = await fetch(`${API_BASE_URL}/api/contests/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

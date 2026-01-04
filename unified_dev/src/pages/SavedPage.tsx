@@ -5,6 +5,7 @@ import { Layout, Users, Bookmark, Trophy, MessageSquare } from 'lucide-react';
 import { GlassCard } from '../components/GlassCard'; // Adjust path if needed
 import { PostCard, PostProps } from '../components/PostCard'; // Adjust path if needed
 import { Sidebar } from '../components/Sidebar'; // Adjust path if needed
+import { API_BASE_URL } from '../config';
 
 // Interface for User
 interface UserProfile {
@@ -30,7 +31,7 @@ export function SavedPage() {
 
       try {
         // 1. Fetch User Profile first (We need the ID to check likes)
-        const userRes = await fetch('http://localhost:5000/api/users/profile', {
+        const userRes = await fetch(`${API_BASE_URL}/api/users/profile`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -41,7 +42,7 @@ export function SavedPage() {
         // 2. Fetch All Posts
         // ( Ideally, your backend should have an endpoint like /api/posts/liked, 
         //   but we can filter client-side to make it work immediately without backend changes )
-        const postsRes = await fetch('http://localhost:5000/api/posts', {
+        const postsRes = await fetch(`${API_BASE_URL}/api/posts`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const allPosts: PostProps[] = await postsRes.json();

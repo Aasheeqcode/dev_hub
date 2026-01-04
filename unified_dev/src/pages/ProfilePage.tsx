@@ -5,6 +5,7 @@ import { GlassCard } from '../components/GlassCard';
 import { NeonButton } from '../components/NeonButton';
 import { PostCard, PostProps } from '../components/PostCard';
 import { Sidebar } from '../components/Sidebar';
+import { API_BASE_URL } from '../config';
 
 interface UserProfile {
   _id: string;
@@ -29,7 +30,7 @@ export function ProfilePage() {
 
       try {
         // 1. Fetch Profile
-        const userRes = await fetch('http://localhost:5000/api/users/profile', {
+        const userRes = await fetch(`${API_BASE_URL}/api/users/profile`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -38,7 +39,7 @@ export function ProfilePage() {
         setUser(userData);
 
         // 2. Fetch ALL Posts & Filter (Temporary Solution)
-        const postsRes = await fetch('http://localhost:5000/api/posts', {
+        const postsRes = await fetch(`${API_BASE_URL}/api/posts`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const allPosts = await postsRes.json();

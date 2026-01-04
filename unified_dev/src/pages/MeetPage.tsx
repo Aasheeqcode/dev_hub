@@ -5,6 +5,7 @@ import {
   Users, Settings, PenTool, Copy, Plus, ArrowRight, Link as LinkIcon 
 } from 'lucide-react';
 
+import { API_BASE_URL } from '../config';
 // Stream Imports
 import {
   StreamVideo,
@@ -79,7 +80,7 @@ export default function MeetPage() {
 
       // 2. Token Provider (Fetches from your Backend)
       const tokenProvider = async () => {
-        const response = await fetch("http://localhost:5000/api/auth/stream-token", {
+        const response = await fetch(`${API_BASE_URL}/api/auth/stream-token`, {
           headers: {
             "Authorization": `Bearer ${localStorage.getItem("token")}`
           }

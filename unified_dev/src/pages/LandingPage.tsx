@@ -5,6 +5,7 @@ import {
   Code, Layout, Users, Bookmark, Trophy, 
   MessageSquare, X, Type, Image as ImageIcon 
 } from 'lucide-react';
+import { API_BASE_URL } from '../config';
 
 import { GlassCard } from '../components/GlassCard';
 import { NeonButton } from '../components/NeonButton';
@@ -49,7 +50,7 @@ export function LandingPage() {
 
       try {
         // 1. Get User Profile (Auth Check)
-        const userRes = await fetch('http://localhost:5000/api/users/profile', {
+        const userRes = await fetch(`${API_BASE_URL}/api/users/profile`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -58,7 +59,7 @@ export function LandingPage() {
         setUser(userData);
 
         // 2. Get News Feed
-        const postsRes = await fetch('http://localhost:5000/api/posts', {
+        const postsRes = await fetch(`${API_BASE_URL}/api/posts`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const postsData = await postsRes.json();
@@ -91,7 +92,7 @@ export function LandingPage() {
         userId: user?._id 
       };
 
-      const response = await fetch('http://localhost:5000/api/posts', {
+      const response = await fetch(`${API_BASE_URL}/api/posts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
