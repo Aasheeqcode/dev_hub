@@ -10,10 +10,9 @@ connectDB();
 
 const app = express();
 app.use(cors({
-  origin: '*', // Allow ALL origins (Easiest fix for now)
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: "https://dev-hub-olive.vercel.app", // Your Vercel URL
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true
 }));
 app.use(express.json());
 // --- ROUTES ---
